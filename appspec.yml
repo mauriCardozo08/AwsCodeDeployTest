@@ -1,0 +1,6 @@
+version: 0.0
+os: linux
+files:
+  - source: site
+    destination: /var/www/firstwebapptest
+file_exists_behavior: OVERWRITE
