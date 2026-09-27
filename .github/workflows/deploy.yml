@@ -1,0 +1,49 @@
+name: Deploy to on-premise
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:   # allows manual runs from the Actions tab
+
+permissions:
+  id-token: write      # required for OIDC
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  BUCKET: code-deploy-test-mc-975630231455
+  APP_NAME: mi-app
+  DEPLOY_GROUP: onprem-dg
+  ROLE_ARN: arn:aws:iam::975630231455:role/github-actions-codedeploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build artifact
+        run: zip -r deploy.zip appspec.yml site
+
+      - name: Upload to S3
+        run: aws s3 cp deploy.zip s3://$BUCKET/$APP_NAME/${{ github.sha }}.zip
+
+      - name: Create deployment and wait for result
+        run: |
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name $APP_NAME \
+            --deployment-group-name $DEPLOY_GROUP \
+            --s3-location bucket=$BUCKET,key=$APP_NAME/${{ github.sha }}.zip,bundleType=zip \
+            --file-exists-behavior OVERWRITE \
+            --description "Commit ${{ github.sha }}" \
+            --query deploymentId --output text)
+          echo "Deployment created: $DEPLOYMENT_ID"
+          aws deploy wait deployment-successful --deployment-id $DEPLOYMENT_ID
+          echo "Deployment completed successfully"
