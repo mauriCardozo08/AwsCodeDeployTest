@@ -2,7 +2,7 @@
 
 Continuous deployment of a static website from GitHub to an **on-premises Linux server** (nginx) using **GitHub Actions**, **Amazon S3** and **AWS CodeDeploy**.
 
-Every push to `main` packages the site, uploads it to S3 and triggers a CodeDeploy deployment. The CodeDeploy agent running on the on-premises server picks up the deployment, downloads the artifact from S3 and copies the files into the nginx web root.
+Every push to `main` that changes `site/` or `appspec.yml` packages the site, uploads it to S3 and triggers a CodeDeploy deployment. The CodeDeploy agent running on the on-premises server picks up the deployment, downloads the artifact from S3 and copies the files into the nginx web root.
 
 ---
 
@@ -25,25 +25,20 @@ Every push to `main` packages the site, uploads it to S3 and triggers a CodeDepl
 ```
  ┌──────────────┐   push to main   ┌──────────────────┐
  │  Developer   │ ───────────────▶ │  GitHub Actions  │
- └──────────────┘                  └────────┬─────────┘
-                                            │ 1. OIDC token → STS AssumeRoleWithWebIdentity
-                                            │    (temporary credentials, no stored secrets)
-                                            │ 2. zip + upload artifact
-                                            ▼
-                                   ┌──────────────────┐
-                                   │    Amazon S3     │
-                                   └────────▲─────────┘
-                                            │ 4. agent downloads artifact
-                      3. create-deployment  │
- ┌──────────────────┐ ◀──────────────────── │
- │  AWS CodeDeploy  │                       │
- └────────┬─────────┘                       │
-          │ agent polls for commands        │
-          ▼                                 │
- ┌──────────────────────────────────────────┴──┐
- │  On-premises server (Ubuntu + nginx)        │
- │  CodeDeploy agent → copies site/ to web root│
- └─────────────────────────────────────────────┘
+ └──────────────┘                  └───┬──────────┬───┘
+                                       │          │ 1. OIDC token → STS AssumeRoleWithWebIdentity
+                 3. create-deployment  │          │    (temporary credentials, no stored secrets)
+          ┌────────────────────────────┘          │ 2. zip + upload artifact
+          ▼                                       ▼
+ ┌──────────────────┐                    ┌──────────────────┐
+ │  AWS CodeDeploy  │                    │    Amazon S3     │
+ └────────▲─────────┘                    └────────▲─────────┘
+          │ 4. agent polls for commands           │ 5. agent downloads artifact
+          │    (outbound HTTPS only)              │
+ ┌────────┴───────────────────────────────────────┴──┐
+ │  On-premises server (Ubuntu + nginx)              │
+ │  CodeDeploy agent → copies site/ to web root      │
+ └───────────────────────────────────────────────────┘
 ```
 
 CodeDeploy never pushes anything to the server. The agent on the server **polls** CodeDeploy for pending work, which means the server only needs outbound HTTPS access to AWS.
@@ -55,7 +50,7 @@ CodeDeploy never pushes anything to the server. The agent on the server **polls*
 | **Application** | A named container for what you deploy | `code-deploy-test-app` |
 | **Deployment group** | *Where* and *how* to deploy: target servers (selected by tag), service role, deployment strategy | `onprem-dg` |
 | **Revision** | *Which version*: a zip in S3 containing the files and `appspec.yml` | `s3://<bucket>/code-deploy-test-app/<commit-sha>.zip` |
-| **Deployment** | One execution: application + deployment group + revision | Created by the workflow on every push |
+| **Deployment** | One execution: application + deployment group + revision | Created by the workflow on every push that changes `site/` or `appspec.yml` |
 
 Instances are never referenced directly in a deployment. The deployment group selects them by tag, so adding a new server only requires registering it with the same tag.
 
@@ -452,7 +447,7 @@ Each commit produces its own artifact named after the commit SHA, which makes it
 
 ## How a deployment works end to end
 
-1. A commit is pushed to `main`.
+1. A commit that changes `site/` or `appspec.yml` is pushed to `main` (other changes, like README edits, do not trigger the workflow).
 2. GitHub Actions assumes `github-actions-codedeploy` via OIDC.
 3. The workflow zips `appspec.yml` + `site/` and uploads it to S3.
 4. The workflow calls `create-deployment` for `code-deploy-test-app` / `onprem-dg`.

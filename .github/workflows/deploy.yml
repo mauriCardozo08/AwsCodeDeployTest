@@ -3,6 +3,9 @@ name: Deploy to on-premise
 on:
   push:
     branches: [main]
+    paths:             # only deploy when the site or the deployment spec changes
+      - 'site/**'
+      - 'appspec.yml'
   workflow_dispatch:   # allows manual runs from the Actions tab
 
 permissions:
