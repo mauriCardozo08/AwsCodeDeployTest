@@ -12,7 +12,7 @@ permissions:
 env:
   AWS_REGION: us-east-1
   BUCKET: code-deploy-test-mc-975630231455
-  APP_NAME: mi-app
+  APP_NAME: code-deploy-test-app
   DEPLOY_GROUP: onprem-dg
   ROLE_ARN: arn:aws:iam::975630231455:role/github-actions-codedeploy
 
