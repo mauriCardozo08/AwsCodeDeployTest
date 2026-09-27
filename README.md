@@ -163,42 +163,14 @@ region: us-east-1
 
 The `iam_user_arn` must match the IAM user **exactly** (see [Troubleshooting](#agent-log-shows-internalfailure-on-poll_host_command)).
 
-### 2.2 Ruby 3.2 (workaround for Ubuntu 26.04)
+### 2.2 Install Ruby
 
-Ubuntu 26.04 ships Ruby 3.3, but the current CodeDeploy agent (1.8.x) only supports Ruby up to 3.2. Two things are needed: a real Ruby 3.2 interpreter, and an apt package named `ruby3.2` to satisfy the `.deb` dependency.
-
-**Build Ruby 3.2 alongside the system Ruby:**
+The CodeDeploy agent runs on Ruby, so install it before the agent:
 
 ```bash
-sudo apt install -y git build-essential libssl-dev libyaml-dev zlib1g-dev libffi-dev libreadline-dev
-git clone https://github.com/rbenv/ruby-build.git /tmp/ruby-build
-sudo /tmp/ruby-build/install.sh
-ruby-build --definitions | grep '^3\.2'      # pick the latest 3.2.x
-sudo ruby-build 3.2.8 /opt/ruby-3.2
-sudo ln -sf /opt/ruby-3.2/bin/ruby /usr/bin/ruby3.2
-/usr/bin/ruby3.2 -v                         # must print ruby 3.2.x
+sudo apt update
+sudo apt install -y ruby-full wget
 ```
-
-Keep the symlink: the agent also uses it at startup.
-
-**Create a placeholder `ruby3.2` package:**
-
-```bash
-sudo apt install -y equivs
-cd /tmp
-cat > ruby3.2-dummy <<'EOF'
-Section: misc
-Priority: optional
-Standards-Version: 3.9.2
-Package: ruby3.2
-Version: 3.2.99-local
-Description: Placeholder package - Ruby 3.2 built in /opt/ruby-3.2
-EOF
-equivs-build ruby3.2-dummy
-sudo dpkg -i ruby3.2_3.2.99-local_all.deb
-```
-
-> On distributions that still ship Ruby ≤ 3.2, skip this section and just `sudo apt install -y ruby-full`.
 
 ### 2.3 Install the agent
 
@@ -389,6 +361,9 @@ name: Deploy to on-premise
 on:
   push:
     branches: [main]
+    paths:             # only deploy when the site or the deployment spec changes
+      - 'site/**'
+      - 'appspec.yml'
   workflow_dispatch:   # allows manual runs from the Actions tab
 
 permissions:
@@ -460,14 +435,6 @@ Each commit produces its own artifact named after the commit SHA, which makes it
 ## Troubleshooting
 
 Issues found while building this setup, and how they were fixed.
-
-### Agent installer: `Ruby version 2.x, 3.x needs to be installed`
-
-The system has Ruby 3.3, which the installer does not accept. Build Ruby 3.2 and symlink it to `/usr/bin/ruby3.2` (section 2.2). Make sure the symlink points to the 3.2 build and not to the system Ruby: if the installer says *"The Ruby version in /usr/bin/ruby3.2 is 3.3.x"*, the link is wrong.
-
-### Agent installer: `Dependency is not satisfiable: ruby2.0|...|ruby3.2`
-
-The `.deb` depends on an apt package named `ruby3.x`, regardless of which Ruby binaries exist. Install the placeholder package from section 2.2.
 
 ### Agent log shows `InternalFailure` on `poll_host_command`
 
